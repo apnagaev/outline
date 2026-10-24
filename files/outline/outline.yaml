@@ -1,0 +1,54 @@
+x-common: &common
+  restart: unless-stopped
+  dns:
+    - 10.255.253.2
+  networks:
+    - outline
+
+services:
+  outline:
+    <<: *common
+    container_name: outline
+    image: docker.getoutline.com/outlinewiki/outline:latest
+    ports:
+      - 4000:4000
+    env_file: ./outline.env
+    volumes:
+      - /outline/storage:/var/lib/outline/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/_health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  drawio:
+    <<: *common
+    container_name: drawio
+    image: jgraph/drawio:latest
+    ports:
+      - 8485:8080
+    env_file: ./grist.env
+
+  grist:
+    <<: *common
+    container_name: grist
+    image: gristlabs/grist:latest
+    ports:
+      - 8484:8484
+    env_file: ./grist.env
+    volumes:
+      - /grist:/persist
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8484/status').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+networks:
+  outline:
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.1.128/28
