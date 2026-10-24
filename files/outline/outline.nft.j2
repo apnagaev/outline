@@ -1,0 +1,24 @@
+#!/usr/sbin/nft -f
+# {{ ansible_managed }}
+# Порты, опубликованные Docker (ports:), не проходят через input — Docker делает DNAT
+# в prerouting (priority -100). Поэтому фильтруем раньше, на priority -150:
+# здесь еще видны настоящий адрес клиента и опубликованный порт.
+# Таблица своя, правила Docker не трогаются; повторное применение заменяет таблицу.
+
+table inet outline
+delete table inet outline
+
+table inet outline {
+  set proxies    { type ipv4_addr; flags interval; elements = { {{ proxies | join(', ') }}, 172.16.0.0/12 } }
+  set monitoring { type ipv4_addr; elements = { {{ monitoring | join(', ') }} } }
+
+  chain prerouting {
+    type filter hook prerouting priority -150; policy accept;
+
+    ct state established,related accept
+    iif lo accept                       # обращения с самого хоста (127.0.0.1, свой IP) идут через lo и тоже проходят prerouting
+    tcp dport { {{ published_ports | join(', ') }} } ip saddr @proxies accept      # reverse proxy (в т.ч. из Docker-сети)
+    tcp dport { {{ published_ports | join(', ') }} } ip saddr @monitoring accept   # мониторинг
+    tcp dport { {{ published_ports | join(', ') }} } drop
+  }
+}
