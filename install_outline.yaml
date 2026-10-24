@@ -1,0 +1,148 @@
+- hosts: docker
+  become: yes
+  vars:
+    service: outline
+    dir_compose: '/docker-compose/{{ service }}'
+    proxies: [10.255.253.76, 10.255.253.77, 10.255.253.78]
+    monitoring: [10.255.253.104]
+    published_ports: [4000, 8484, 8485]
+    # что проверяем после перезапуска узла
+    health_urls:
+      - http://127.0.0.1:4000/_health    # outline
+      - http://127.0.0.1:8484/status     # grist
+      - http://127.0.0.1:8485/           # drawio
+    # NFS-каталоги с данными: без них контейнеры стартовать не должны
+    nfs_mounts: [/outline, /grist]
+    # Узел, который в nginx основной (active). Он перезапускается последним.
+    active_node: 1
+
+  handlers:
+    # Применяем только свою таблицу. НЕ делаем systemctl reload nftables:
+    # в стандартном /etc/nftables.conf есть "flush ruleset", он снесет правила Docker.
+    - name: apply outline firewall
+      command: nft -f /etc/nftables.d/{{ service }}.nft
+
+  tasks:
+
+  # ---------- Firewall ----------
+  - name: Install nftables
+    apt:
+      name: nftables
+      state: present
+
+  - name: Creates directories
+    file:
+      path: "{{ item }}"
+      state: directory
+    loop:
+      - "{{ dir_compose }}"
+      - /etc/nftables.d
+      - /etc/systemd/system/docker.service.d
+
+  - name: Firewall rules for outline
+    template:
+      src: 'files/{{ service }}/{{ service }}.nft.j2'
+      dest: '/etc/nftables.d/{{ service }}.nft'
+      mode: '0644'
+      validate: 'nft -c -f %s'
+    notify: apply outline firewall
+
+  - name: Load rules on boot
+    lineinfile:
+      path: /etc/nftables.conf
+      line: 'include "/etc/nftables.d/*.nft"'
+
+  - name: Enable nftables on boot
+    systemd:
+      name: nftables
+      enabled: yes
+
+  - name: Apply firewall now
+    meta: flush_handlers
+
+  # ---------- NFS ----------
+  # Если NFS не смонтирован, контейнер запишет данные в пустой локальный каталог,
+  # и узлы молча разъедутся. Поэтому без примонтированных каталогов дальше не идем.
+  - name: Check NFS mounts
+    command: mountpoint -q {{ item }}
+    loop: '{{ nfs_mounts }}'
+    changed_when: false
+
+  # При загрузке Docker стартует только после монтирования NFS
+  - name: Docker waits for NFS on boot
+    copy:
+      dest: /etc/systemd/system/docker.service.d/nfs-mounts.conf
+      mode: '0644'
+      content: |
+        [Unit]
+        RequiresMountsFor={{ nfs_mounts | join(' ') }}
+    register: docker_dropin
+
+  - name: Reload systemd
+    systemd:
+      daemon_reload: yes
+    when: docker_dropin.changed
+
+  # ---------- Outline ----------
+  - name: copy docker-compose
+    copy:
+      src: 'files/{{ service }}/{{ service }}.yaml'
+      dest: '{{ dir_compose }}/docker-compose.yaml'
+
+  - name: copy env files (secrets)
+    copy:
+      src: 'files/{{ service }}/{{ item }}'
+      dest: '{{ dir_compose }}/{{ item }}'
+      mode: '0600'
+    loop:
+      - outline.env
+      - grist.env
+      - drawio.env
+
+  - name: update images
+    command: docker compose pull
+    args:
+      chdir: '{{ dir_compose }}'
+    changed_when: false
+
+  # Сначала пассивный узел: когда дойдет очередь до активного,
+  # nginx переключится на уже обновленный и проверенный пассивный.
+  - name: Docker-compose run (passive node)
+    command: docker compose up -d --force-recreate --remove-orphans
+    args:
+      chdir: '{{ dir_compose }}'
+    when: node != active_node
+
+  - name: Check passive node ready
+    uri:
+      url: '{{ item }}'
+    register: ready
+    until: ready.status == 200
+    retries: 30
+    delay: 5
+    loop: '{{ health_urls }}'
+    when: node != active_node
+
+  - name: Docker-compose run (active node)
+    command: docker compose up -d --force-recreate --remove-orphans
+    args:
+      chdir: '{{ dir_compose }}'
+    when: node == active_node
+
+  - name: Check active node ready
+    uri:
+      url: '{{ item }}'
+    register: ready
+    until: ready.status == 200
+    retries: 30
+    delay: 5
+    loop: '{{ health_urls }}'
+    when: node == active_node
+
+  - name: Docker clear
+    command: "{{ item }}"
+    loop:
+      - docker system prune -a -f
+      - docker volume prune -a -f
+    register: prune
+    changed_when: "'Total reclaimed space: 0B' not in prune.stdout"
