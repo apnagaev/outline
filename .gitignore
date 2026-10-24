@@ -1,0 +1,6 @@
+# Секреты и локальные данные — никогда не коммитим
+*.env
+inventory.yml
+vault*.yml
+.vault_pass*
+*.retry
