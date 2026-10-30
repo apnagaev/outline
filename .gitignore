@@ -1,5 +1,7 @@
 # Секреты и локальные данные — никогда не коммитим
 *.env
+vars/*.yml
+!vars/*.example.yml
 inventory.yml
 vault*.yml
 .vault_pass*

@@ -1,10 +1,12 @@
 - hosts: docker
   become: yes
+  # Адреса вашей инсталляции (прокси, мониторинг, DNS) — в vars/outline.yml (не в git).
+  # Шаблон: vars/outline.example.yml. Значения из vars_files сильнее блока vars ниже.
+  vars_files:
+    - vars/outline.yml
   vars:
     service: outline
     dir_compose: '/docker-compose/{{ service }}'
-    proxies: [10.255.253.76, 10.255.253.77, 10.255.253.78]
-    monitoring: [10.255.253.104]
     published_ports: [4000, 8484, 8485]
     # что проверяем после перезапуска узла
     health_urls:
@@ -84,9 +86,9 @@
     when: docker_dropin.changed
 
   # ---------- Outline ----------
-  - name: copy docker-compose
-    copy:
-      src: 'files/{{ service }}/{{ service }}.yaml'
+  - name: render docker-compose
+    template:
+      src: 'files/{{ service }}/{{ service }}.yaml.j2'
       dest: '{{ dir_compose }}/docker-compose.yaml'
 
   - name: copy env files (secrets)

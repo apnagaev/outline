@@ -3,9 +3,9 @@ all:
   children:
     docker:
       hosts:
-        docker1:
+        node1:
           ansible_host: 11.11.11.11
           node: 1                 # порядок перезапуска: сначала 1, потом 2
-        docker2:
+        node2:
           ansible_host: 22.22.22.22
           node: 2
