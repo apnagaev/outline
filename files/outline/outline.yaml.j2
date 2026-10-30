@@ -1,7 +1,8 @@
+# Сгенерировано Ansible из files/outline/outline.yaml.j2. DNS — из vars/outline.yml.
 x-common: &common
   restart: unless-stopped
   dns:
-    - 1.1.1.1                # ваш DNS-сервер
+    - {{ dns_server }}
   networks:
     - outline
 

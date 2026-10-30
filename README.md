@@ -14,13 +14,14 @@
 ```
 install_outline.yaml           # плейбук: firewall + деплой + rolling restart + очистка
 inventory.example.yml          # пример inventory (скопировать в inventory.yml)
+vars/outline.example.yml       # адреса прокси, мониторинга, DNS (скопировать в vars/outline.yml)
 files/outline/
-  outline.yaml                 # docker-compose
+  outline.yaml.j2              # шаблон docker-compose
   outline.nft.j2               # шаблон правил nftables
-  docker.env.example           # шаблон настроек Outline
+  outline.env.example          # шаблон настроек Outline
   grist.env.example            # шаблон настроек Grist
-  docker.env                   # НЕ в репозитории — реальные настройки Outline
-  grist.env                    # НЕ в репозитории — реальные настройки Grist
+  drawio.env.example           # шаблон настроек draw.io
+  outline.env, grist.env, drawio.env   # НЕ в репозитории — реальные настройки
 ```
 
 ## Требования
@@ -41,8 +42,9 @@ files/outline/
 
 2. Секреты:
    ```bash
-   cp files/outline/docker.env.example files/outline/docker.env
-   cp files/outline/grist.env.example  files/outline/grist.env
+   cp files/outline/outline.env.example files/outline/outline.env
+   cp files/outline/grist.env.example   files/outline/grist.env
+   cp files/outline/drawio.env.example  files/outline/drawio.env
    ```
    Замените все `CHANGE_ME`. Новые ключи генерируются `openssl rand -hex 32`.
    **`SECRET_KEY` на работающей инсталляции не меняйте**: им зашифрованы данные в БД Outline.
@@ -50,12 +52,22 @@ files/outline/
    Можно дополнительно зашифровать оба файла: `ansible-vault encrypt files/outline/*.env` —
    модуль `copy` расшифрует их при копировании, плейбук запускайте с `--ask-vault-pass`.
 
-3. Переменные плейбука (`install_outline.yaml`, блок `vars`):
+3. Адреса инсталляции:
+   ```bash
+   cp vars/outline.example.yml vars/outline.yml
+   ```
+   Файл в `.gitignore`, поэтому код можно обновлять из git (`git pull`), не трогая свои значения.
 
-   | Переменная | Назначение |
+   | Переменная (`vars/outline.yml`) | Назначение |
    |---|---|
    | `proxies` | IP reverse proxy, включая vIP |
    | `monitoring` | IP системы мониторинга |
+   | `dns_server` | DNS для контейнеров |
+
+   Остальное — в блоке `vars` плейбука `install_outline.yaml`:
+
+   | Переменная | Назначение |
+   |---|---|
    | `published_ports` | порты, которые закрывает firewall (совпадают с `ports:` в compose) |
    | `health_urls` | что проверяется после перезапуска узла |
 
