@@ -1,7 +1,7 @@
 x-common: &common
   restart: unless-stopped
   dns:
-    - 10.255.253.2
+    - 1.1.1.1                # ваш DNS-сервер
   networks:
     - outline
 

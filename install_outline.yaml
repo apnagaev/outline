@@ -3,8 +3,8 @@
   vars:
     service: outline
     dir_compose: '/docker-compose/{{ service }}'
-    proxies: [10.255.253.76, 10.255.253.77, 10.255.253.78]
-    monitoring: [10.255.253.104]
+    proxies: [11.11.11.11, 22.22.22.22, 99.99.99.99]   # reverse proxy на узлах и vIP
+    monitoring: [33.33.33.33]
     published_ports: [4000, 8484, 8485]
     # что проверяем после перезапуска узла
     health_urls:
